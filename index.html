@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07090c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sons">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="description" content="Reproductor de sons per a directes: ordena, tria com es reprodueixen i desa escenes.">
+<title>Sons en directe</title>
+<style>
+:root{--bg:#07090c;--panel:#0e1217;--line:#252c36;--ink:#f3f1ec;--mute:#8f9aa8;--amber:#ffb627;--amber-d:#c98a0a;--green:#5fd0a3;--red:#e5636b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;touch-action:manipulation}
+button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+#app{flex:1;min-height:0;display:flex;flex-direction:column}
+.player{flex:1 1 0;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:10px 18px 20px;gap:8px}
+.topbar{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.brand{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute)}
+.brand .dot{width:8px;height:8px;border-radius:50%;background:var(--mute);transition:background .15s}
+.brand .dot.live{background:var(--red);box-shadow:0 0 0 4px rgba(229,99,107,.16)}
+.status{font-size:12px;color:var(--mute);font-variant-numeric:tabular-nums;text-align:right}
+.now{width:100%;text-align:center;min-height:0}
+.now h1{margin:0;font-size:clamp(22px,5vw,38px);font-weight:700;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.now p{margin:6px 0 0;color:var(--mute);font-size:clamp(13px,2.6vw,17px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar{width:min(560px,100%);display:flex;align-items:center;gap:10px;font-variant-numeric:tabular-nums;color:var(--mute);font-size:14px}
+.track{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.track i{display:block;height:100%;width:0;background:var(--amber)}
+.mode-wrap{width:min(560px,100%);display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;color:var(--mute);font-size:13px}
+.segmented{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px;gap:3px}
+.seg{padding:8px 15px;border-radius:999px;color:var(--mute);font-size:13px;white-space:nowrap}
+.seg[aria-pressed="true"]{background:var(--amber);color:#1a1405;font-weight:700}
+.seg.layer[aria-pressed="true"]{background:var(--green);color:#042019}
+.seg:disabled{opacity:.35}
+.vol{width:min(560px,100%);display:flex;align-items:center;gap:10px;color:var(--mute);font-size:14px;font-variant-numeric:tabular-nums}
+.vol svg{width:22px;height:22px;flex:none}
+.vol input{flex:1;min-width:0;height:36px;margin:0;accent-color:var(--amber)}
+.vol span{width:44px;text-align:right}
+.big{flex:0 1 auto;width:min(54vw,27vh,300px);aspect-ratio:1;border-radius:50%;background:var(--amber);color:#1a1405;display:grid;place-items:center;box-shadow:0 0 0 10px rgba(255,182,39,.1),0 14px 40px rgba(0,0,0,.5);transition:transform .08s}
+.big:active{transform:scale(.96);background:var(--amber-d)}
+.big svg{width:46%;height:46%}
+.big.on{background:var(--ink);box-shadow:0 0 0 10px rgba(243,241,236,.1),0 14px 40px rgba(0,0,0,.5)}
+.ctl{display:flex;gap:14px;align-items:center}
+.ctl button{width:clamp(76px,19vw,116px);height:clamp(54px,9vh,76px);border-radius:18px;background:var(--panel);border:1px solid var(--line);display:grid;place-items:center}
+.ctl button:active{background:#1b212a}
+.ctl button:disabled{opacity:.3}
+.ctl svg{width:34px;height:34px}
+#stop{color:var(--red)}
+.list{flex:0 0 34dvh;min-height:185px;display:flex;flex-direction:column;background:var(--panel);border-top:1px solid var(--line)}
+.list.drop{outline:2px dashed var(--amber);outline-offset:-6px}
+.head{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;gap:8px;flex-wrap:wrap}
+.head b{font-size:15px}
+.tools{display:flex;gap:6px;flex-wrap:wrap}
+.pill{padding:8px 12px;border-radius:999px;background:var(--bg);border:1px solid var(--line);font-size:13px}
+.pill.hl{background:var(--amber);color:#1a1405;border-color:var(--amber);font-weight:700}
+.pill.ic{padding:8px 10px;display:grid;place-items:center}
+.pill.ic svg{width:18px;height:18px;display:block}
+.pill:disabled{opacity:.3}
+ol{list-style:none;margin:0;padding:0 8px 8px;overflow-y:auto;flex:1;-webkit-overflow-scrolling:touch}
+li{display:flex;align-items:center;gap:6px;border-radius:12px;padding:2px 4px}
+li.cur{background:rgba(255,182,39,.13)}
+li.playing .num{color:var(--green)}
+.row-n{width:36px;flex:none;display:grid;place-items:center;color:var(--mute);font-variant-numeric:tabular-nums;font-size:14px}
+.eq{display:none;align-items:flex-end;gap:2px;height:14px}
+.eq i{width:3px;background:var(--green);border-radius:2px;animation:eq .8s ease-in-out infinite}
+.eq i:nth-child(1){height:40%;animation-delay:0s}.eq i:nth-child(2){height:100%;animation-delay:.2s}.eq i:nth-child(3){height:60%;animation-delay:.4s}
+li.playing .eq{display:flex}li.playing .num{display:none}
+@keyframes eq{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
+.row-t{flex:1;text-align:left;padding:12px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px}
+.chip{font-size:10px;padding:4px 7px;border-radius:6px;border:1px solid var(--line);color:var(--mute);white-space:nowrap;flex:none}
+.chip.layer{color:var(--green);border-color:rgba(95,208,163,.4)}
+.m{width:36px;height:36px;border-radius:9px;background:var(--bg);border:1px solid var(--line);font-size:15px;flex:none}
+.m.x{color:var(--red)}
+.m.mode{color:var(--green);font-weight:700}
+.m:disabled{opacity:.3}
+.vol-mini{width:64px;accent-color:var(--amber);flex:none}
+.empty{padding:26px 20px;text-align:center;color:var(--mute);line-height:1.5;font-size:14px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.76);display:grid;place-items:center;padding:18px;z-index:10}
+.modal[hidden]{display:none}
+.sheet{width:min(540px,100%);max-height:82dvh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px}
+.sheet-head b{font-size:18px}
+.sheet-head button{padding:6px 10px;border-radius:8px;border:1px solid var(--line);color:var(--mute)}
+.scene{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:12px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;background:var(--bg)}
+.scene b{font-size:15px}
+.scene small{display:block;color:var(--mute);font-size:11px;margin-top:3px}
+.scene-actions{display:flex;gap:6px;flex:none}
+.scene-actions button{padding:8px 12px;border-radius:8px;border:1px solid var(--line);font-size:13px}
+.scene-actions button.apply{border-color:var(--amber);color:var(--amber)}
+.scene-actions button.x{color:var(--red)}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#e9e4d8;color:#17120a;padding:10px 16px;border-radius:999px;font-size:13px;z-index:20;max-width:90vw;text-align:center}
+.toast[hidden]{display:none}
+.ask p{color:var(--mute);font-size:14px;line-height:1.5;margin:0 0 14px}
+.ask input{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--ink);padding:12px;font-size:16px;font-family:inherit;user-select:text;-webkit-user-select:text}
+.ask-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.ask-actions button{padding:10px 16px;border-radius:9px;border:1px solid var(--line);font-size:14px}
+.ask-actions button.ok{background:var(--amber);color:#1a1405;border-color:var(--amber);font-weight:700}
+@media (orientation:landscape) and (min-width:700px){
+ #app{flex-direction:row}
+ .player{flex:1 1 55%}
+ .list{flex:1 1 45%;min-height:0;border-top:0;border-left:1px solid var(--line)}
+ .big{width:min(38vw,58vh,300px)}
+}
+@media (max-height:520px) and (orientation:portrait){
+ html,body{height:auto;min-height:100%;overflow-x:hidden;overflow-y:auto}
+ #app{flex:none;min-height:100dvh}
+ .player{flex:0 0 auto;min-height:400px;padding:8px 14px 14px;gap:6px}
+ .list{flex:0 0 35dvh;min-height:140px}
+ .big{width:min(40vw,19vh,180px)}
+ .ctl button{height:52px}
+}
+@media (prefers-reduced-motion:reduce){.eq i{animation:none}.big{transition:none}}
+</style>
+</head>
+<body>
+<div id="app">
+ <section class="player">
+  <div class="topbar"><div class="brand"><span class="dot" id="dot"></span><span>Sons en directe</span></div><div class="status" id="status">En silenci</div></div>
+  <div class="now"><h1 id="title">Cap so carregat</h1><p id="next">Afegeix sons per començar</p></div>
+  <div class="bar"><span id="cur">0:00</span><div class="track" id="progress" role="progressbar" aria-label="Progrés de reproducció" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><i id="fill"></i></div><span id="dur">0:00</span></div>
+  <div class="mode-wrap"><span>Aquest so:</span><div class="segmented" role="group" aria-label="Com es reprodueix aquest so"><button class="seg" id="modeSolo" aria-pressed="true">Apaga els altres</button><button class="seg layer" id="modeLayer" aria-pressed="false">Al damunt</button></div></div>
+  <div class="vol"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="100" value="100" aria-label="Volum general"><span id="volv">100%</span></div>
+  <button id="play" class="big" aria-label="Reproduir" disabled></button>
+  <div class="ctl">
+   <button id="prev" aria-label="So anterior" disabled></button>
+   <button id="stop" aria-label="Aturar-ho tot" disabled></button>
+   <button id="nextb" aria-label="So següent" disabled></button>
+  </div>
+ </section>
+ <section class="list" id="list">
+  <div class="head"><b id="count">Sons</b>
+   <div class="tools">
+    <button class="pill ic" id="sceneSave" title="Desar l'escena actual" aria-label="Desar l'escena actual" disabled></button>
+    <button class="pill ic" id="sceneOpen" title="Escenes desades" aria-label="Escenes desades"></button>
+    <button class="pill ic" id="export" title="Exportar-ho tot a JSON" aria-label="Exportar-ho tot a JSON" disabled></button>
+    <button class="pill ic" id="import" title="Importar una escena des d'un JSON" aria-label="Importar una escena des d'un JSON"></button>
+    <button class="pill" id="edit">Editar</button>
+    <button class="pill hl" id="add">+ Afegir sons</button>
+   </div>
+  </div>
+  <ol id="ol"></ol>
+ </section>
+</div>
+<div class="modal" id="scenesModal" hidden>
+ <div class="sheet">
+  <div class="sheet-head"><b>Escenes desades</b><button id="sceneClose" aria-label="Tanca">✕</button></div>
+  <div id="scenesList"></div>
+ </div>
+</div>
+<div class="modal" id="askModal" hidden>
+ <div class="sheet ask">
+  <div class="sheet-head"><b id="askTitle"></b></div>
+  <p id="askMsg"></p>
+  <input type="text" id="askInput" hidden>
+  <div class="ask-actions"><button id="askCancel">Cancel·la</button><button id="askOk" class="ok">D'acord</button></div>
+ </div>
+</div>
+<input type="file" id="file" multiple hidden>
+<input type="file" id="jfile" accept=".json,application/json" hidden>
+<div id="toast" class="toast" hidden role="status"></div>
+<script src="app.js"></script>
+</body>
+</html>
