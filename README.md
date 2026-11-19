@@ -36,15 +36,18 @@ git push -u origin main
 - **Mode de reproducció** (a sobre del PLAY):
   - *Apaga els altres*: en començar aquest so, s'aturen tots els altres que estiguin sonant.
   - *Al damunt*: aquest so s'afegeix als que ja estan sonant (capes). Pots tenir tants sons sonant alhora com vulguis.
-- **Quan un so acaba**, es carrega automàticament el següent de la llista i **espera** a que el tornis a prémer PLAY. No s'engega sol.
-- **Editar**: canvia l'ordre amb ▲/▼, renombra amb ✎, esborra amb ✕, ajusta el volum de cada so i el seu mode amb el botó `!`/`+`.
+- **Bucle**: el botó «↻ Bucle» (o la tecla `L`) activa/desactiva que el so carregat es repeteixi sense parar. També es pot activar so per so des del mode `Editar`. Amb el bucle actiu el so no acaba, així que no es carrega el següent.
+- **Barra de progrés**: toca o arrossega qualsevol punt de la barra per saltar a aquell temps de la pista. També es pot fer amb les fletxes (salts de 5 s), `Home` i `End` quan la barra té el focus. Si encara no s'ha reproduït el so, el punt triat s'aplica quan es premi PLAY.
+- **Quan un so acaba** (sense bucle), es carrega automàticament el següent de la llista i **espera** a que el tornis a prémer PLAY. No s'engega sol.
+- **Editar**: canvia l'ordre amb ▲/▼, renombra amb ✎, esborra amb ✕, ajusta el volum de cada so i canvia el seu mode amb `!`/`+` o el bucle amb `↻`.
 - **Desar l'escena** (icona de marcador): guarda un nom amb l'ordre, volums, modes, volum general i el so carregat. **Escenes** (icona de llista) les aplica o les esborra.
-- **Exportar / Importar JSON** (icones de fletxes): l'exportació inclou tots els àudios (en base64), l'ordre, volums, modes, escenes i l'estat actual. La importació ho substitueix tot després de demanar confirmació.
+- **Exportar / Importar JSON** (icones de fletxes): l'exportació inclou tots els àudios (en base64), l'ordre, volums, modes, estat del bucle, escenes i l'estat actual. La importació ho substitueix tot després de demanar confirmació. Els JSON i escenes de versions anteriors (sense bucle) es carreguen igual, amb el bucle desactivat.
 
 ### Ratolí / teclat
 
 - `Espai` = play/pausa del so carregat
 - `←` / `→` = so anterior / següent
+- `L` = bucle on/off del so carregat
 - `Esc` = aturar-ho tot
 - Doble clic sobre un nom de la llista = carregar-lo i reproduir-lo
 

@@ -14,7 +14,7 @@
 <meta name="description" content="Reproductor de sons per a directes: ordena, tria com es reprodueixen i desa escenes.">
 <title>Sons en directe</title>
 <style>
-:root{--bg:#07090c;--panel:#0e1217;--line:#252c36;--ink:#f3f1ec;--mute:#8f9aa8;--amber:#ffb627;--amber-d:#c98a0a;--green:#5fd0a3;--red:#e5636b}
+:root{--bg:#07090c;--panel:#0e1217;--line:#252c36;--ink:#f3f1ec;--mute:#8f9aa8;--amber:#ffb627;--amber-d:#c98a0a;--green:#5fd0a3;--blue:#7aa2ff;--red:#e5636b}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
 html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
 body{display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
@@ -31,14 +31,22 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
 .now h1{margin:0;font-size:clamp(22px,5vw,38px);font-weight:700;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .now p{margin:6px 0 0;color:var(--mute);font-size:clamp(13px,2.6vw,17px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bar{width:min(560px,100%);display:flex;align-items:center;gap:10px;font-variant-numeric:tabular-nums;color:var(--mute);font-size:14px}
-.track{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
-.track i{display:block;height:100%;width:0;background:var(--amber)}
+.track{flex:1;height:26px;display:flex;align-items:center;cursor:pointer;touch-action:none}
+.track .rail{width:100%;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.track .rail i{display:block;height:100%;width:0;background:var(--amber)}
+.track:hover .rail{background:#333b47}
 .mode-wrap{width:min(560px,100%);display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;color:var(--mute);font-size:13px}
 .segmented{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px;gap:3px}
 .seg{padding:8px 15px;border-radius:999px;color:var(--mute);font-size:13px;white-space:nowrap}
 .seg[aria-pressed="true"]{background:var(--amber);color:#1a1405;font-weight:700}
 .seg.layer[aria-pressed="true"]{background:var(--green);color:#042019}
 .seg:disabled{opacity:.35}
+.loop-btn{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--mute);font-size:13px;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.loop-btn svg{width:16px;height:16px}
+.loop-btn[aria-pressed="true"]{border-color:var(--blue);color:var(--blue);background:rgba(122,162,255,.12)}
+.loop-btn:disabled{opacity:.35}
+.m.loop{color:var(--blue);font-size:18px}
+.m.loop.on{border-color:var(--blue);background:rgba(122,162,255,.12)}
 .vol{width:min(560px,100%);display:flex;align-items:center;gap:10px;color:var(--mute);font-size:14px;font-variant-numeric:tabular-nums}
 .vol svg{width:22px;height:22px;flex:none}
 .vol input{flex:1;min-width:0;height:36px;margin:0;accent-color:var(--amber)}
@@ -76,6 +84,7 @@ li.playing .eq{display:flex}li.playing .num{display:none}
 .row-t{flex:1;text-align:left;padding:12px 4px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:16px}
 .chip{font-size:10px;padding:4px 7px;border-radius:6px;border:1px solid var(--line);color:var(--mute);white-space:nowrap;flex:none}
 .chip.layer{color:var(--green);border-color:rgba(95,208,163,.4)}
+.chip.loop{color:var(--blue);border-color:rgba(122,162,255,.4);font-size:13px}
 .m{width:36px;height:36px;border-radius:9px;background:var(--bg);border:1px solid var(--line);font-size:15px;flex:none}
 .m.x{color:var(--red)}
 .m.mode{color:var(--green);font-weight:700}
@@ -124,8 +133,8 @@ li.playing .eq{display:flex}li.playing .num{display:none}
  <section class="player">
   <div class="topbar"><div class="brand"><span class="dot" id="dot"></span><span>Sons en directe</span></div><div class="status" id="status">En silenci</div></div>
   <div class="now"><h1 id="title">Cap so carregat</h1><p id="next">Afegeix sons per començar</p></div>
-  <div class="bar"><span id="cur">0:00</span><div class="track" id="progress" role="progressbar" aria-label="Progrés de reproducció" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><i id="fill"></i></div><span id="dur">0:00</span></div>
-  <div class="mode-wrap"><span>Aquest so:</span><div class="segmented" role="group" aria-label="Com es reprodueix aquest so"><button class="seg" id="modeSolo" aria-pressed="true">Apaga els altres</button><button class="seg layer" id="modeLayer" aria-pressed="false">Al damunt</button></div></div>
+  <div class="bar"><span id="cur">0:00</span><div class="track" id="progress" role="slider" tabindex="0" aria-label="Posició de la pista (toc o fletxes per saltar)" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00"><div class="rail"><i id="fill"></i></div></div><span id="dur">0:00</span></div>
+  <div class="mode-wrap"><span>Aquest so:</span><div class="segmented" role="group" aria-label="Com es reprodueix aquest so"><button class="seg" id="modeSolo" aria-pressed="true">Apaga els altres</button><button class="seg layer" id="modeLayer" aria-pressed="false">Al damunt</button></div><button class="loop-btn" id="loop" aria-pressed="false" title="Repeteix aquest so en bucle (tecla L)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2l4 4-4 4M7 22l-4-4 4-4M3 6h13a4 4 0 0 1 4 4M21 18H8a4 4 0 0 1-4-4"/></svg>Bucle</button></div>
   <div class="vol"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="100" value="100" aria-label="Volum general"><span id="volv">100%</span></div>
   <button id="play" class="big" aria-label="Reproduir" disabled></button>
   <div class="ctl">

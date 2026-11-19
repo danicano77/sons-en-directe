@@ -79,6 +79,7 @@
   let dbReady = false;
   let uid = 0;
   const voices = new Map();            // voiceId -> {id, soundId, audio, ignore}
+  const pendingSeek = new Map();       // soundId -> segons on es començarà la reproducció
   const cueAudio = new Audio();        // només per llegir la durada del so carregat
   cueAudio.preload = 'metadata';
   let wakeLock = null, toastTimer = null, volTimer = null;
@@ -165,6 +166,16 @@
     const a = new Audio(s.url);
     const v = { id: nextId(), soundId: s.id, audio: a, ignore: false };
     a.volume = volFor(s);
+    a.loop = !!s.loop;
+    a.addEventListener('loadedmetadata', () => {
+      if (!pendingSeek.has(s.id)) return;
+      const t = pendingSeek.get(s.id);
+      pendingSeek.delete(s.id);
+      if (Number.isFinite(a.duration) && a.duration > 0) {
+        try { a.currentTime = Math.min(t, a.duration - 0.01); } catch (e) { /* ignore */ }
+      }
+      progress();
+    });
     const finish = () => {
       voices.delete(v.id);
       if (!v.ignore && cur >= 0 && sounds[cur] && sounds[cur].id === s.id) {
@@ -215,14 +226,67 @@
     const v = currentVoice();
     const dur = v && Number.isFinite(v.audio.duration) ? v.audio.duration
       : (Number.isFinite(cueAudio.duration) ? cueAudio.duration : 0);
-    const time = v && Number.isFinite(v.audio.currentTime) ? v.audio.currentTime : 0;
+    const time = v && Number.isFinite(v.audio.currentTime) ? v.audio.currentTime
+      : (cur >= 0 ? (pendingSeek.get(sounds[cur].id) || 0) : 0);
     $('cur').textContent = fmt(time);
     $('dur').textContent = fmt(dur);
     $('fill').style.width = (dur ? time / dur * 100 : 0) + '%';
     const bar = $('progress');
     bar.setAttribute('aria-valuemax', String(dur));
     bar.setAttribute('aria-valuenow', String(Math.min(time, dur)));
+    bar.setAttribute('aria-valuetext', fmt(time) + ' de ' + fmt(dur));
   }
+
+  /* Cerca a la barra: tocar o arrossegar qualsevol punt salta a aquell temps */
+  function seekRatio(ratio) {
+    if (cur < 0) return;
+    const v = currentVoice();
+    const dur = v && Number.isFinite(v.audio.duration) ? v.audio.duration
+      : (Number.isFinite(cueAudio.duration) ? cueAudio.duration : 0);
+    if (!dur || !Number.isFinite(dur)) { toast('Encara no es coneix la durada d\'aquest so'); return; }
+    const t = Math.max(0, Math.min(dur - 0.01, ratio * dur));
+    if (v) {
+      try { v.audio.currentTime = t; } catch (e) { toast('No s\'ha pogut saltar a aquest temps'); return; }
+    } else {
+      pendingSeek.set(sounds[cur].id, t); // s'aplica quan es premi play
+    }
+    progress();
+  }
+  function seekFromEvent(e) {
+    const rect = $('progress').getBoundingClientRect();
+    if (!rect.width) return;
+    seekRatio((e.clientX - rect.left) / rect.width);
+  }
+  let seeking = false;
+  const bar = $('progress');
+  bar.addEventListener('pointerdown', e => {
+    if (cur < 0) return;
+    seeking = true;
+    try { bar.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    seekFromEvent(e);
+  });
+  bar.addEventListener('pointermove', e => { if (seeking) seekFromEvent(e); });
+  const endSeek = e => {
+    if (!seeking) return;
+    seeking = false;
+    try { bar.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+  };
+  bar.addEventListener('pointerup', endSeek);
+  bar.addEventListener('pointercancel', endSeek);
+  bar.addEventListener('keydown', e => {
+    const v = currentVoice();
+    const dur = v && Number.isFinite(v.audio.duration) ? v.audio.duration : cueAudio.duration;
+    if (!Number.isFinite(dur) || !dur) return;
+    let t = v && Number.isFinite(v.audio.currentTime) ? v.audio.currentTime : (pendingSeek.get(sounds[cur]?.id) || 0);
+    if (e.key === 'ArrowRight') t += 5;
+    else if (e.key === 'ArrowLeft') t -= 5;
+    else if (e.key === 'Home') t = 0;
+    else if (e.key === 'End') t = dur - 0.01;
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+    seekRatio(Math.max(0, Math.min(1, t / dur)));
+  });
 
   /* ---------- Pantalla encesa i controls del sistema ---------- */
   async function wake(on) {
@@ -256,7 +320,7 @@
       pause: () => { const v = currentVoice(); if (v) v.audio.pause(); },
       previoustrack: () => go(-1),
       nexttrack: () => go(1),
-      stop: () => stopAll()
+      stop: () => { pendingSeek.clear(); stopAll(); progress(); }
     };
     for (const k in handlers) { try { navigator.mediaSession.setActionHandler(k, handlers[k]); } catch (e) {} }
   }
@@ -277,9 +341,10 @@
       return '<li class="' + cls + '" data-index="' + i + '">' +
         '<span class="row-n"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span class="num">' + (i + 1) + '</span></span>' +
         '<button class="row-t" data-act="cue" title="Toca per carregar · doble toca per reproduir">' + esc(s.name) + '</button>' +
-        (edit ? '' : '<span class="chip ' + s.mode + '">' + (s.mode === 'layer' ? 'Al damunt' : 'Apaga els altres') + '</span>') +
+        (edit ? '' : '<span class="chip ' + s.mode + '">' + (s.mode === 'layer' ? 'Al damunt' : 'Apaga els altres') + '</span>' + (s.loop ? '<span class="chip loop" title="Bucle actiu">↻</span>' : '')) +
         (edit ?
           '<input class="vol-mini" type="range" min="0" max="100" value="' + Math.round(clampVol(s.volume)) + '" data-act="vol" aria-label="Volum de ' + esc(s.name) + '">' +
+          '<button class="m loop' + (s.loop ? ' on' : '') + '" data-act="loop" title="' + (s.loop ? 'Bucle actiu — toca per desactivar' : 'Bucle desactivat — toca per activar') + '" aria-label="Bucle">' + '↻' + '</button>' +
           '<button class="m mode" data-act="mode" title="Canvia el mode d\'aquest so">' + (s.mode === 'layer' ? '+' : '!') + '</button>' +
           '<button class="m" data-act="rename" title="Canvia el nom">✎</button>' +
           '<button class="m" data-act="up" ' + (i === 0 ? 'disabled' : '') + ' aria-label="Puja">▲</button>' +
@@ -313,6 +378,8 @@
     $('modeLayer').disabled = !has;
     $('modeSolo').setAttribute('aria-pressed', String(has && sounds[cur].mode === 'exclusive'));
     $('modeLayer').setAttribute('aria-pressed', String(has && sounds[cur].mode === 'layer'));
+    $('loop').disabled = !has;
+    $('loop').setAttribute('aria-pressed', String(has && !!sounds[cur].loop));
     $('count').textContent = sounds.length ? sounds.length + (sounds.length === 1 ? ' so' : ' sons') : 'Sons';
     $('edit').textContent = edit ? 'Fet' : 'Editar';
     $('edit').classList.toggle('hl', edit);
@@ -341,6 +408,15 @@
     if (cur < 0) return;
     sounds[cur].mode = mode;
     if (dbReady) await put('sounds', sounds[cur]);
+    render();
+  }
+  async function setLoop(i, val) {
+    if (i < 0 || i >= sounds.length) return;
+    sounds[i].loop = !!val;
+    for (const voice of voices.values()) {
+      if (voice.soundId === sounds[i].id) voice.audio.loop = !!val;
+    }
+    if (dbReady) await put('sounds', sounds[i]);
     render();
   }
   function setMasterVolume(v) {
@@ -389,7 +465,7 @@
     const sc = {
       id: nextId(), name, createdAt: new Date().toISOString(),
       masterVolume, currentIndex: cur,
-      items: sounds.map(s => ({ id: s.id, volume: s.volume, mode: s.mode }))
+      items: sounds.map(s => ({ id: s.id, volume: s.volume, mode: s.mode, loop: !!s.loop }))
     };
     scenes.push(sc);
     if (dbReady) await put('scenes', sc);
@@ -405,7 +481,7 @@
     const byId = new Map(sounds.map(s => [s.id, s]));
     for (const it of (sc.items || [])) {
       const s = byId.get(it.id);
-      if (s) { s.volume = clampVol(it.volume); s.mode = it.mode === 'layer' ? 'layer' : 'exclusive'; }
+      if (s) { s.volume = clampVol(it.volume); s.mode = it.mode === 'layer' ? 'layer' : 'exclusive'; s.loop = !!it.loop; }
     }
     const order = new Map((sc.items || []).map((it, i) => [it.id, i]));
     sounds.sort((a, b) => (order.has(a.id) ? order.get(a.id) : 1e9) - (order.has(b.id) ? order.get(b.id) : 1e9));
@@ -445,7 +521,7 @@
         masterVolume, currentIndex: cur,
         sounds: await Promise.all(sounds.map(async s => ({
           id: s.id, name: s.name, fileName: s.fileName || s.name, type: s.blob.type || s.type || 'audio/mpeg',
-          volume: s.volume, mode: s.mode, data: await toB64(s.blob)
+          volume: s.volume, mode: s.mode, loop: !!s.loop, data: await toB64(s.blob)
         }))),
         scenes: scenes.map(sc => ({ ...sc }))
       };
@@ -476,7 +552,7 @@
       const rec = {
         id: typeof raw.id === 'string' && raw.id ? raw.id : nextId(),
         name: raw.name.trim() || 'So', fileName: raw.fileName || raw.name, type, blob,
-        volume: clampVol(raw.volume), mode: raw.mode === 'layer' ? 'layer' : 'exclusive', order: count
+        volume: clampVol(raw.volume), mode: raw.mode === 'layer' ? 'layer' : 'exclusive', loop: raw.loop === true, order: count
       };
       if (dbReady) await put('sounds', rec);
       sounds.push({ ...rec, url: URL.createObjectURL(blob) });
@@ -489,7 +565,7 @@
         name: String(raw.name || 'Escena'), createdAt: raw.createdAt || new Date().toISOString(),
         masterVolume: clampVol(raw.masterVolume), currentIndex: Number(raw.currentIndex) || 0,
         items: raw.items.filter(it => it && typeof it.id === 'string').map(it => ({
-          id: it.id, volume: clampVol(it.volume), mode: it.mode === 'layer' ? 'layer' : 'exclusive'
+          id: it.id, volume: clampVol(it.volume), mode: it.mode === 'layer' ? 'layer' : 'exclusive', loop: it.loop === true
         }))
       };
       scenes.push(sc);
@@ -504,11 +580,12 @@
 
   /* ---------- Esdeveniments ---------- */
   $('play').onclick = playCued;
-  $('stop').onclick = () => stopAll();
+  $('stop').onclick = () => { pendingSeek.clear(); stopAll(); progress(); };
   $('prev').onclick = () => go(-1);
   $('nextb').onclick = () => go(1);
   $('modeSolo').onclick = () => setMode('exclusive');
   $('modeLayer').onclick = () => setMode('layer');
+  $('loop').onclick = () => { if (cur >= 0) setLoop(cur, !sounds[cur].loop); };
   $('vol').oninput = e => setMasterVolume(Number(e.target.value));
   cueAudio.addEventListener('loadedmetadata', progress);
 
@@ -525,7 +602,7 @@
     for (const [k, f] of files.entries()) {
       const rec = {
         id: nextId(), name: f.name.replace(/\.[^.]+$/, ''), fileName: f.name, type: f.type || '',
-        blob: f, volume: 100, mode: 'exclusive', order: base + k
+        blob: f, volume: 100, mode: 'exclusive', loop: false, order: base + k
       };
       if (dbReady) await put('sounds', rec);
       sounds.push({ ...rec, url: URL.createObjectURL(f) });
@@ -546,6 +623,7 @@
     else if (act === 'del') deleteSound(i);
     else if (act === 'rename') rename(i);
     else if (act === 'mode') { sounds[i].mode = sounds[i].mode === 'layer' ? 'exclusive' : 'layer'; if (dbReady) put('sounds', sounds[i]).catch(() => {}); render(); }
+    else if (act === 'loop') setLoop(i, !sounds[i].loop);
   });
   $('ol').addEventListener('dblclick', e => {
     const btn = e.target.closest('[data-act="cue"]');
@@ -578,7 +656,7 @@
     if (!kept.length) return;
     const base = sounds.length;
     for (const [k, f] of kept.entries()) {
-      const rec = { id: nextId(), name: f.name.replace(/\.[^.]+$/, ''), fileName: f.name, type: f.type || '', blob: f, volume: 100, mode: 'exclusive', order: base + k };
+      const rec = { id: nextId(), name: f.name.replace(/\.[^.]+$/, ''), fileName: f.name, type: f.type || '', blob: f, volume: 100, mode: 'exclusive', loop: false, order: base + k };
       if (dbReady) await put('sounds', rec);
       sounds.push({ ...rec, url: URL.createObjectURL(f) });
     }
@@ -615,7 +693,8 @@
     if (e.code === 'Space') { e.preventDefault(); playCued(); }
     else if (e.code === 'ArrowRight') { e.preventDefault(); go(1); }
     else if (e.code === 'ArrowLeft') { e.preventDefault(); go(-1); }
-    else if (e.code === 'Escape') stopAll();
+    else if (e.code === 'KeyL') { e.preventDefault(); if (cur >= 0) setLoop(cur, !sounds[cur].loop); }
+    else if (e.code === 'Escape') { pendingSeek.clear(); stopAll(); progress(); }
   });
 
   /* ---------- Arrencada ---------- */
@@ -624,7 +703,7 @@
       db = await openDB();
       dbReady = true;
       const recs = await getAll('sounds');
-      sounds = recs.sort((a, b) => (a.order || 0) - (b.order || 0)).map(r => ({ ...r, url: URL.createObjectURL(r.blob) }));
+      sounds = recs.sort((a, b) => (a.order || 0) - (b.order || 0)).map(r => ({ ...r, loop: !!r.loop, url: URL.createObjectURL(r.blob) }));
       scenes = await getAll('scenes');
       const mv = localStorage.getItem('sons-directe-master');
       if (mv !== null) masterVolume = clampVol(mv);
