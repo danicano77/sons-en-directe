@@ -89,10 +89,9 @@
   const DEFAULT_PLAYKEY = { code: 'Space', label: 'Espai' };
   let playKey = DEFAULT_PLAYKEY;
 
-  /* Fade en aturar: curt / llarg amb segons ajustables (es desa al localStorage) */
-  const FADE_STORAGE = 'sons-directe-fade';
-  let fadeSec = .8;
-  try { const f = parseFloat(localStorage.getItem(FADE_STORAGE)); if (Number.isFinite(f)) fadeSec = Math.max(0, Math.min(30, f)); } catch (e) { /* ignore */ }
+  /* Fade: cada so té el seu (0 = sense fade); STOP/pausa fan servir un de curt fixe */
+  const STOP_FADE = .8;
+  const clampFade = v => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(30, n)) : 0; };
 
   const nextId = () => 'x' + Date.now().toString(36) + '_' + (uid++).toString(36) + Math.random().toString(36).slice(2, 6);
   const clampVol = v => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 100; };
@@ -129,15 +128,6 @@
   function renderPlayKey() {
     $('playKeyLabel').textContent = playKey.label;
     $('keyPick').title = 'Tria la tecla per reproduir (ara: ' + playKey.label + ')';
-  }
-
-  function saveFade() {
-    try { localStorage.setItem(FADE_STORAGE, String(fadeSec)); } catch (e) { /* ignore */ }
-  }
-  function syncFadeUI(setValue) {
-    if (setValue) $('fadeSec').value = String(fadeSec);
-    $('fadeShort').setAttribute('aria-pressed', String(fadeSec <= 1.5));
-    $('fadeLong').setAttribute('aria-pressed', String(fadeSec > 1.5));
   }
 
   function toast(msg) {
@@ -230,11 +220,27 @@
   function currentVoice() {
     if (cur < 0 || !sounds[cur]) return null;
     const id = sounds[cur].id;
-    const list = [...voices.values()].filter(v => v.soundId === id && !v.fading);
+    const list = [...voices.values()].filter(v => v.soundId === id);
     return list.find(v => !v.audio.paused) || list[0] || null;
   }
 
-  /* Fade out: baixa el volum de cada veu fins a 0 i després la para */
+  /* Fades: STOP/pausa = curt fixe; final de pista = el configurat a cada so */
+  function voiceSound(v) { return sounds.find(s => s.id === v.soundId); }
+  function cancelStopFade(v, restore) {
+    if (!v.fading) return;
+    if (v.fadeRaf) cancelAnimationFrame(v.fadeRaf);
+    v.fading = false;
+    v.fadeRaf = null;
+    if (restore) { const s = voiceSound(v); if (s) try { v.audio.volume = volFor(s); } catch (e) { /* ignore */ } }
+  }
+  function cancelEndFade(v, restore) {
+    if (!v.endFading) return false;
+    if (v.endFadeRaf) cancelAnimationFrame(v.endFadeRaf);
+    v.endFading = false;
+    v.endFadeRaf = null;
+    if (restore) { const s = voiceSound(v); if (s) try { v.audio.volume = volFor(s); } catch (e) { /* ignore */ } }
+    return true;
+  }
   function finishFadeVoice(v) {
     if (v.fadeRaf) cancelAnimationFrame(v.fadeRaf);
     v.fading = false;
@@ -245,24 +251,45 @@
     renderList();
     progress();
   }
-  function fadeVoice(v) {
-    if (v.fading || fadeSec <= 0 || v.audio.paused) { finishFadeVoice(v); return; }
+  function fadeVoice(v, secs) {
+    if (v.fading || secs <= 0 || v.audio.paused) { finishFadeVoice(v); return; }
     v.fading = true;
     const a = v.audio, from = a.volume, t0 = performance.now();
     const step = () => {
       if (!voices.has(v.id)) { finishFadeVoice(v); return; }
-      const k = Math.min(1, (performance.now() - t0) / (fadeSec * 1000));
+      const k = Math.min(1, (performance.now() - t0) / (secs * 1000));
       a.volume = Math.max(0, from * (1 - k));
       if (k < 1 && !a.paused) v.fadeRaf = requestAnimationFrame(step);
       else finishFadeVoice(v);
     };
     v.fadeRaf = requestAnimationFrame(step);
   }
+  /* S'avança al final de la pista perquè el fade sigui audible */
+  function maybeEndFade(v, s) {
+    if (v.fading || v.endFading || v.audio.paused) return;
+    const f = clampFade(s && s.fade);
+    if (f <= 0) return;
+    const a = v.audio, rem = a.duration - a.currentTime;
+    if (!Number.isFinite(rem) || rem <= 0 || rem > f + .05 || a.volume <= .001) return;
+    v.endFading = true;
+    const from = a.volume, t0 = performance.now();
+    const step = () => {
+      if (!voices.has(v.id) || a.paused) { v.endFading = false; v.endFadeRaf = null; return; }
+      const k = Math.min(1, (performance.now() - t0) / (rem * 1000));
+      a.volume = Math.max(0, from * (1 - k));
+      if (k < 1) v.endFadeRaf = requestAnimationFrame(step);
+      else { v.endFading = false; v.endFadeRaf = null; }
+    };
+    v.endFadeRaf = requestAnimationFrame(step);
+  }
   function stopAll(ignoreEnded, instant) {
     for (const v of voices.values()) {
       v.ignore = !!ignoreEnded;
-      if (!instant && fadeSec > 0 && !v.fading && !v.audio.paused) fadeVoice(v);
+      cancelEndFade(v, false);
+      if (!instant && STOP_FADE > 0 && !v.fading && !v.audio.paused) fadeVoice(v, STOP_FADE);
       else {
+        if (v.fadeRaf) cancelAnimationFrame(v.fadeRaf);
+        v.fading = false; v.fadeRaf = null;
         try { v.audio.pause(); v.audio.currentTime = 0; } catch (e) { /* ignore */ }
         voices.delete(v.id);
       }
@@ -287,6 +314,8 @@
       progress();
     });
     const finish = () => {
+      if (v.endFadeRaf) cancelAnimationFrame(v.endFadeRaf);
+      v.endFading = false; v.endFadeRaf = null;
       voices.delete(v.id);
       if (!v.ignore && cur >= 0 && sounds[cur] && sounds[cur].id === s.id) {
         // Quan acaba, es carrega el següent i espera a ser reproduït (no arrenca sol).
@@ -305,7 +334,7 @@
       renderList();
       toast('No s\'ha pogut reproduir «' + s.name + '»');
     });
-    a.addEventListener('timeupdate', progress);
+    a.addEventListener('timeupdate', () => { progress(); maybeEndFade(v, s); });
     voices.set(v.id, v);
     a.play().then(() => { syncPlay(); renderList(); }).catch(() => {
       voices.delete(v.id);
@@ -320,8 +349,11 @@
     const s = sounds[cur];
     const v = currentVoice();
     if (v) {
-      if (v.audio.paused) v.audio.play().then(syncPlay).catch(() => {});
-      else v.audio.pause();
+      const paused = v.audio.paused;
+      cancelStopFade(v, paused);
+      cancelEndFade(v, paused);
+      if (paused) v.audio.play().then(syncPlay).catch(() => {});
+      else fadeVoice(v, STOP_FADE);
       syncPlay();
       renderList();
       return;
@@ -359,6 +391,8 @@
     if (!dur || !Number.isFinite(dur)) { toast('Encara no es coneix la durada d\'aquest so'); return; }
     const t = Math.max(0, Math.min(dur - 0.01, ratio * dur));
     if (v) {
+      cancelStopFade(v, true);
+      cancelEndFade(v, true);
       try { v.audio.currentTime = t; } catch (e) { toast('No s\'ha pogut saltar a aquest temps'); return; }
     } else {
       pendingSeek.set(sounds[cur].id, t); // s'aplica quan es premi play
@@ -477,9 +511,10 @@
       return '<li class="' + cls + '" data-index="' + i + '">' +
         '<span class="row-n"><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span class="num">' + (i + 1) + '</span></span>' +
         '<button class="row-t" data-act="cue" title="Toca per carregar · doble toca per reproduir">' + esc(s.name) + '</button>' +
-        (edit ? '' : '<span class="chip ' + s.mode + '">' + (s.mode === 'layer' ? 'Al damunt' : 'Apaga els altres') + '</span>' + (s.loop ? '<span class="chip loop" title="Bucle actiu">↻</span>' : '')) +
+        (edit ? '' : '<span class="chip ' + s.mode + '">' + (s.mode === 'layer' ? 'Al damunt' : 'Apaga els altres') + '</span>' + (s.loop ? '<span class="chip loop" title="Bucle actiu">↻</span>' : '') + (clampFade(s.fade) > 0 ? '<span class="chip" title="Fade en acabar">' + clampFade(s.fade) + 's</span>' : '')) +
         (edit ?
           '<input class="vol-mini" type="range" min="0" max="100" value="' + Math.round(clampVol(s.volume)) + '" data-act="vol" aria-label="Volum de ' + esc(s.name) + '">' +
+          '<input class="fade-mini" type="number" min="0" max="30" step="0.1" value="' + clampFade(s.fade) + '" data-act="fade" title="Fade en acabar, en segons (0 = sense fade)" aria-label="Fade en acabar de ' + esc(s.name) + ' (0 = sense fade)">' +
           '<button class="m loop' + (s.loop ? ' on' : '') + '" data-act="loop" title="' + (s.loop ? 'Bucle actiu — toca per desactivar' : 'Bucle desactivat — toca per activar') + '" aria-label="Bucle">' + '↻' + '</button>' +
           '<button class="m mode" data-act="mode" title="Canvia el mode d\'aquest so">' + (s.mode === 'layer' ? '+' : '!') + '</button>' +
           '<button class="m" data-act="rename" title="Canvia el nom">✎</button>' +
@@ -567,6 +602,11 @@
     clearTimeout(volTimer);
     volTimer = setTimeout(() => { if (dbReady) put('sounds', sounds[i]).catch(() => {}); }, 250);
   }
+  function setSoundFade(i, v) {
+    if (i < 0 || i >= sounds.length) return;
+    sounds[i].fade = clampFade(v);
+    if (dbReady) put('sounds', sounds[i]).catch(() => {});
+  }
   async function rename(i) {
     const n = await ask({ title: 'Nom del so', value: sounds[i].name });
     if (!n) return;
@@ -601,7 +641,7 @@
     const sc = {
       id: nextId(), name, createdAt: new Date().toISOString(),
       masterVolume, currentIndex: cur,
-      items: sounds.map(s => ({ id: s.id, volume: s.volume, mode: s.mode, loop: !!s.loop }))
+      items: sounds.map(s => ({ id: s.id, volume: s.volume, mode: s.mode, loop: !!s.loop, fade: clampFade(s.fade) }))
     };
     scenes.push(sc);
     if (dbReady) await put('scenes', sc);
@@ -617,7 +657,7 @@
     const byId = new Map(sounds.map(s => [s.id, s]));
     for (const it of (sc.items || [])) {
       const s = byId.get(it.id);
-      if (s) { s.volume = clampVol(it.volume); s.mode = it.mode === 'layer' ? 'layer' : 'exclusive'; s.loop = !!it.loop; }
+      if (s) { s.volume = clampVol(it.volume); s.mode = it.mode === 'layer' ? 'layer' : 'exclusive'; s.loop = !!it.loop; s.fade = clampFade(it.fade); }
     }
     const order = new Map((sc.items || []).map((it, i) => [it.id, i]));
     sounds.sort((a, b) => (order.has(a.id) ? order.get(a.id) : 1e9) - (order.has(b.id) ? order.get(b.id) : 1e9));
@@ -657,7 +697,7 @@
         masterVolume, currentIndex: cur,
         sounds: await Promise.all(sounds.map(async s => ({
           id: s.id, name: s.name, fileName: s.fileName || s.name, type: s.blob.type || s.type || 'audio/mpeg',
-          volume: s.volume, mode: s.mode, loop: !!s.loop, data: await toB64(s.blob)
+          volume: s.volume, mode: s.mode, loop: !!s.loop, fade: clampFade(s.fade), data: await toB64(s.blob)
         }))),
         scenes: scenes.map(sc => ({ ...sc }))
       };
@@ -688,7 +728,7 @@
       const rec = {
         id: typeof raw.id === 'string' && raw.id ? raw.id : nextId(),
         name: raw.name.trim() || 'So', fileName: raw.fileName || raw.name, type, blob,
-        volume: clampVol(raw.volume), mode: raw.mode === 'layer' ? 'layer' : 'exclusive', loop: raw.loop === true, order: count
+        volume: clampVol(raw.volume), mode: raw.mode === 'layer' ? 'layer' : 'exclusive', loop: raw.loop === true, fade: clampFade(raw.fade), order: count
       };
       if (dbReady) await put('sounds', rec);
       sounds.push({ ...rec, url: URL.createObjectURL(blob) });
@@ -723,17 +763,6 @@
   $('modeLayer').onclick = () => setMode('layer');
   $('loop').onclick = () => { if (cur >= 0) setLoop(cur, !sounds[cur].loop); };
   $('vol').oninput = e => setMasterVolume(Number(e.target.value));
-  $('fadeShort').onclick = () => { fadeSec = .8; saveFade(); syncFadeUI(true); };
-  $('fadeLong').onclick = () => { fadeSec = 3; saveFade(); syncFadeUI(true); };
-  $('fadeSec').oninput = () => {
-    const v = parseFloat($('fadeSec').value);
-    if (!Number.isFinite(v)) return;
-    fadeSec = Math.max(0, Math.min(30, v));
-    saveFade();
-    syncFadeUI(false);
-  };
-  $('fadeSec').onchange = () => syncFadeUI(true);
-  syncFadeUI(true);
   cueAudio.addEventListener('loadedmetadata', progress);
 
   $('edit').onclick = () => { edit = !edit; render(); };
@@ -749,7 +778,7 @@
     for (const [k, f] of files.entries()) {
       const rec = {
         id: nextId(), name: f.name.replace(/\.[^.]+$/, ''), fileName: f.name, type: f.type || '',
-        blob: f, volume: 100, mode: 'exclusive', loop: false, order: base + k
+        blob: f, volume: 100, mode: 'exclusive', loop: false, fade: 0, order: base + k
       };
       if (dbReady) await put('sounds', rec);
       sounds.push({ ...rec, url: URL.createObjectURL(f) });
@@ -781,10 +810,11 @@
     playCued();
   });
   $('ol').addEventListener('input', e => {
-    const el = e.target.closest('[data-act="vol"]');
-    if (!el) return;
-    const li = el.closest('li[data-index]');
-    if (li) setSoundVolume(Number(li.dataset.index), Number(el.value));
+    const li = e.target.closest('li[data-index]');
+    if (!li) return;
+    const i = Number(li.dataset.index);
+    if (e.target.closest('[data-act="vol"]')) setSoundVolume(i, Number(e.target.value));
+    else if (e.target.closest('[data-act="fade"]')) setSoundFade(i, e.target.value);
   });
 
   const list = $('list');
@@ -851,7 +881,7 @@
       db = await openDB();
       dbReady = true;
       const recs = await getAll('sounds');
-      sounds = recs.sort((a, b) => (a.order || 0) - (b.order || 0)).map(r => ({ ...r, loop: !!r.loop, url: URL.createObjectURL(r.blob) }));
+      sounds = recs.sort((a, b) => (a.order || 0) - (b.order || 0)).map(r => ({ ...r, loop: !!r.loop, fade: clampFade(r.fade), url: URL.createObjectURL(r.blob) }));
       scenes = await getAll('scenes');
       const mv = localStorage.getItem('sons-directe-master');
       if (mv !== null) masterVolume = clampVol(mv);

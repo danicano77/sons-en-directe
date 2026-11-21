@@ -45,8 +45,6 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
 .loop-btn svg{width:16px;height:16px}
 .loop-btn[aria-pressed="true"]{border-color:var(--blue);color:var(--blue);background:rgba(122,162,255,.12)}
 .loop-btn:disabled{opacity:.35}
-.fade-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.fade-wrap input{width:58px;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:6px 7px;font:inherit;font-size:13px;font-variant-numeric:tabular-nums;user-select:text;-webkit-user-select:text}
 .m.loop{color:var(--blue);font-size:18px}
 .m.loop.on{border-color:var(--blue);background:rgba(122,162,255,.12)}
 .key-btn{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--mute);font-size:13px;display:flex;align-items:center;gap:6px;white-space:nowrap}
@@ -101,6 +99,7 @@ li.playing .eq{display:flex}li.playing .num{display:none}
 .m.mode{color:var(--green);font-weight:700}
 .m:disabled{opacity:.3}
 .vol-mini{width:64px;accent-color:var(--amber);flex:none}
+.fade-mini{width:58px;height:36px;background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--ink);padding:0 6px;font:inherit;font-size:13px;font-variant-numeric:tabular-nums;flex:none;user-select:text;-webkit-user-select:text}
 .empty{padding:26px 20px;text-align:center;color:var(--mute);line-height:1.5;font-size:14px}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.76);display:grid;place-items:center;padding:18px;z-index:10}
 .modal[hidden]{display:none}
@@ -145,7 +144,7 @@ li.playing .eq{display:flex}li.playing .num{display:none}
   <div class="topbar"><div class="brand"><span class="dot" id="dot"></span><span>Sons en directe</span></div><div class="status" id="status">En silenci</div></div>
   <div class="now"><h1 id="title">Cap so carregat</h1><p id="next">Afegeix sons per començar</p></div>
   <div class="bar"><span id="cur">0:00</span><div class="track" id="progress" role="slider" tabindex="0" aria-label="Posició de la pista (toc o fletxes per saltar)" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00"><div class="rail"><i id="fill"></i></div></div><span id="dur">0:00</span></div>
-  <div class="mode-wrap"><span>Aquest so:</span><div class="segmented" role="group" aria-label="Com es reprodueix aquest so"><button class="seg" id="modeSolo" aria-pressed="true">Apaga els altres</button><button class="seg layer" id="modeLayer" aria-pressed="false">Al damunt</button></div><button class="loop-btn" id="loop" aria-pressed="false" title="Repeteix aquest so en bucle (tecla L)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2l4 4-4 4M7 22l-4-4 4-4M3 6h13a4 4 0 0 1 4 4M21 18H8a4 4 0 0 1-4-4"/></svg>Bucle</button><div class="fade-wrap" role="group" aria-label="Fade en aturar"><span>Fade</span><div class="segmented"><button class="seg" id="fadeShort" aria-pressed="true">Curt</button><button class="seg" id="fadeLong" aria-pressed="false">Llarg</button></div><input type="number" id="fadeSec" min="0" max="30" step="0.1" value="0.8" aria-label="Segons de fade"><span>s</span></div><button class="key-btn" id="keyPick" title="Tria la tecla per reproduir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>Play: <b id="playKeyLabel">Espai</b></button></div>
+  <div class="mode-wrap"><span>Aquest so:</span><div class="segmented" role="group" aria-label="Com es reprodueix aquest so"><button class="seg" id="modeSolo" aria-pressed="true">Apaga els altres</button><button class="seg layer" id="modeLayer" aria-pressed="false">Al damunt</button></div><button class="loop-btn" id="loop" aria-pressed="false" title="Repeteix aquest so en bucle (tecla L)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2l4 4-4 4M7 22l-4-4 4-4M3 6h13a4 4 0 0 1 4 4M21 18H8a4 4 0 0 1-4-4"/></svg>Bucle</button><button class="key-btn" id="keyPick" title="Tria la tecla per reproduir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>Play: <b id="playKeyLabel">Espai</b></button></div>
   <div class="vol"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="100" value="100" aria-label="Volum general"><span id="volv">100%</span></div>
   <button id="play" class="big" aria-label="Reproduir" disabled></button>
   <div class="ctl">

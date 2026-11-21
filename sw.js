@@ -1,4 +1,4 @@
-const CACHE = 'sons-en-directe-v4';
+const CACHE = 'sons-en-directe-v5';
 const FILES = [
   './',
   './index.html',
