@@ -38,6 +38,7 @@ git push -u origin main
   - *Apaga els altres*: en començar aquest so, s'aturen tots els altres que estiguin sonant.
   - *Al damunt*: aquest so s'afegeix als que ja estan sonant (capes). Pots tenir tants sons sonant alhora com vulguis.
 - **Bucle**: el botó «↻ Bucle» (o la tecla `L`) activa/desactiva que el so carregat es repeteixi sense parar. També es pot activar so per so des del mode `Editar`. Amb el bucle actiu el so no acaba, així que no es carrega el següent.
+- **Fade en aturar**: al costat del Bucle hi ha «Fade: Curt | Llarg» amb un camp de segons. «Curt» posa 0,8 s i «Llarg» 3 s, però pots escriure qualsevol valor de 0 a 30 s. Quan aturis tot (STOP, `Esc` o en passar a un so en mode «Apaga els altres»), el volum baixa gradualment durant aquest temps abans de parar del tot. La preferència es desa al dispositiu.
 - **Barra de progrés**: toca o arrossega qualsevol punt de la barra per saltar a aquell temps de la pista. També es pot fer amb les fletxes (salts de 5 s), `Home` i `End` quan la barra té el focus. Si encara no s'ha reproduït el so, el punt triat s'aplica quan es premi PLAY.
 - **Quan un so acaba** (sense bucle), es carrega automàticament el següent de la llista i **espera** a que el tornis a prémer PLAY. No s'engega sol.
 - **Editar**: canvia l'ordre amb ▲/▼, renombra amb ✎, esborra amb ✕, ajusta el volum de cada so i canvia el seu mode amb `!`/`+` o el bucle amb `↻`.

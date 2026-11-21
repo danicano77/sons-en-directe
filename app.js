@@ -89,6 +89,11 @@
   const DEFAULT_PLAYKEY = { code: 'Space', label: 'Espai' };
   let playKey = DEFAULT_PLAYKEY;
 
+  /* Fade en aturar: curt / llarg amb segons ajustables (es desa al localStorage) */
+  const FADE_STORAGE = 'sons-directe-fade';
+  let fadeSec = .8;
+  try { const f = parseFloat(localStorage.getItem(FADE_STORAGE)); if (Number.isFinite(f)) fadeSec = Math.max(0, Math.min(30, f)); } catch (e) { /* ignore */ }
+
   const nextId = () => 'x' + Date.now().toString(36) + '_' + (uid++).toString(36) + Math.random().toString(36).slice(2, 6);
   const clampVol = v => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 100; };
   const fmt = s => { if (!Number.isFinite(s)) return '0:00'; s = Math.floor(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
@@ -124,6 +129,15 @@
   function renderPlayKey() {
     $('playKeyLabel').textContent = playKey.label;
     $('keyPick').title = 'Tria la tecla per reproduir (ara: ' + playKey.label + ')';
+  }
+
+  function saveFade() {
+    try { localStorage.setItem(FADE_STORAGE, String(fadeSec)); } catch (e) { /* ignore */ }
+  }
+  function syncFadeUI(setValue) {
+    if (setValue) $('fadeSec').value = String(fadeSec);
+    $('fadeShort').setAttribute('aria-pressed', String(fadeSec <= 1.5));
+    $('fadeLong').setAttribute('aria-pressed', String(fadeSec > 1.5));
   }
 
   function toast(msg) {
@@ -214,20 +228,48 @@
   }
 
   function currentVoice() {
-    if (cur < 0) return null;
+    if (cur < 0 || !sounds[cur]) return null;
     const id = sounds[cur].id;
-    const list = [...voices.values()].filter(v => v.soundId === id);
+    const list = [...voices.values()].filter(v => v.soundId === id && !v.fading);
     return list.find(v => !v.audio.paused) || list[0] || null;
   }
 
-  function stopAll(ignoreEnded) {
-    for (const v of voices.values()) {
-      v.ignore = !!ignoreEnded;
-      try { v.audio.pause(); v.audio.currentTime = 0; } catch (e) { /* ignore */ }
-    }
-    voices.clear();
+  /* Fade out: baixa el volum de cada veu fins a 0 i després la para */
+  function finishFadeVoice(v) {
+    if (v.fadeRaf) cancelAnimationFrame(v.fadeRaf);
+    v.fading = false;
+    v.fadeRaf = null;
+    try { v.audio.pause(); v.audio.currentTime = 0; } catch (e) { /* ignore */ }
+    voices.delete(v.id);
     syncPlay();
     renderList();
+    progress();
+  }
+  function fadeVoice(v) {
+    if (v.fading || fadeSec <= 0 || v.audio.paused) { finishFadeVoice(v); return; }
+    v.fading = true;
+    const a = v.audio, from = a.volume, t0 = performance.now();
+    const step = () => {
+      if (!voices.has(v.id)) { finishFadeVoice(v); return; }
+      const k = Math.min(1, (performance.now() - t0) / (fadeSec * 1000));
+      a.volume = Math.max(0, from * (1 - k));
+      if (k < 1 && !a.paused) v.fadeRaf = requestAnimationFrame(step);
+      else finishFadeVoice(v);
+    };
+    v.fadeRaf = requestAnimationFrame(step);
+  }
+  function stopAll(ignoreEnded, instant) {
+    for (const v of voices.values()) {
+      v.ignore = !!ignoreEnded;
+      if (!instant && fadeSec > 0 && !v.fading && !v.audio.paused) fadeVoice(v);
+      else {
+        try { v.audio.pause(); v.audio.currentTime = 0; } catch (e) { /* ignore */ }
+        voices.delete(v.id);
+      }
+    }
+    syncPlay();
+    renderList();
+    progress();
   }
 
   function startVoice(s) {
@@ -295,7 +337,7 @@
     const dur = v && Number.isFinite(v.audio.duration) ? v.audio.duration
       : (Number.isFinite(cueAudio.duration) ? cueAudio.duration : 0);
     const time = v && Number.isFinite(v.audio.currentTime) ? v.audio.currentTime
-      : (cur >= 0 ? (pendingSeek.get(sounds[cur].id) || 0) : 0);
+      : (cur >= 0 && sounds[cur] ? (pendingSeek.get(sounds[cur].id) || 0) : 0);
     $('cur').textContent = fmt(time);
     $('dur').textContent = fmt(dur);
     $('fill').style.width = (dur ? time / dur * 100 : 0) + '%';
@@ -631,7 +673,7 @@
       toast('Aquest JSON no és d\'aquesta app'); return;
     }
     if (!(await ask({ title: 'Importar escena', message: 'Això substituirà tots els sons i escenes actuals pels del fitxer. Continuar?', ok: 'Importa' }))) return;
-    stopAll();
+    stopAll(false, true);
     cueAudio.pause(); cueAudio.removeAttribute('src'); cueAudio.load();
     for (const s of sounds) { try { URL.revokeObjectURL(s.url); } catch (e) {} }
     sounds = []; scenes = [];
@@ -681,6 +723,17 @@
   $('modeLayer').onclick = () => setMode('layer');
   $('loop').onclick = () => { if (cur >= 0) setLoop(cur, !sounds[cur].loop); };
   $('vol').oninput = e => setMasterVolume(Number(e.target.value));
+  $('fadeShort').onclick = () => { fadeSec = .8; saveFade(); syncFadeUI(true); };
+  $('fadeLong').onclick = () => { fadeSec = 3; saveFade(); syncFadeUI(true); };
+  $('fadeSec').oninput = () => {
+    const v = parseFloat($('fadeSec').value);
+    if (!Number.isFinite(v)) return;
+    fadeSec = Math.max(0, Math.min(30, v));
+    saveFade();
+    syncFadeUI(false);
+  };
+  $('fadeSec').onchange = () => syncFadeUI(true);
+  syncFadeUI(true);
   cueAudio.addEventListener('loadedmetadata', progress);
 
   $('edit').onclick = () => { edit = !edit; render(); };
