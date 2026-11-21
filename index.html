@@ -47,6 +47,15 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
 .loop-btn:disabled{opacity:.35}
 .m.loop{color:var(--blue);font-size:18px}
 .m.loop.on{border-color:var(--blue);background:rgba(122,162,255,.12)}
+.key-btn{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--mute);font-size:13px;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.key-btn:hover{border-color:var(--amber);color:var(--ink)}
+.key-btn b{color:var(--amber);font-weight:700}
+.key-btn svg{width:16px;height:16px}
+.keycap{display:inline-block;padding:2px 9px;border:1px solid var(--line);border-bottom-width:3px;border-radius:6px;background:var(--bg);color:var(--ink);font:600 13px ui-monospace,Consolas,monospace}
+.ask .hint-key{color:var(--mute);font-size:13px;margin:0 0 12px}
+.key-capture{display:grid;place-items:center;gap:8px;padding:22px 12px;margin:4px 0;border:1px dashed var(--line);border-radius:12px;color:var(--mute);font-size:14px;text-align:center}
+.key-capture .keycap{font-size:20px;padding:7px 18px;color:var(--amber);border-color:var(--amber)}
+.key-capture small{font-size:12px}
 .vol{width:min(560px,100%);display:flex;align-items:center;gap:10px;color:var(--mute);font-size:14px;font-variant-numeric:tabular-nums}
 .vol svg{width:22px;height:22px;flex:none}
 .vol input{flex:1;min-width:0;height:36px;margin:0;accent-color:var(--amber)}
@@ -134,7 +143,7 @@ li.playing .eq{display:flex}li.playing .num{display:none}
   <div class="topbar"><div class="brand"><span class="dot" id="dot"></span><span>Sons en directe</span></div><div class="status" id="status">En silenci</div></div>
   <div class="now"><h1 id="title">Cap so carregat</h1><p id="next">Afegeix sons per començar</p></div>
   <div class="bar"><span id="cur">0:00</span><div class="track" id="progress" role="slider" tabindex="0" aria-label="Posició de la pista (toc o fletxes per saltar)" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00"><div class="rail"><i id="fill"></i></div></div><span id="dur">0:00</span></div>
-  <div class="mode-wrap"><span>Aquest so:</span><div class="segmented" role="group" aria-label="Com es reprodueix aquest so"><button class="seg" id="modeSolo" aria-pressed="true">Apaga els altres</button><button class="seg layer" id="modeLayer" aria-pressed="false">Al damunt</button></div><button class="loop-btn" id="loop" aria-pressed="false" title="Repeteix aquest so en bucle (tecla L)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2l4 4-4 4M7 22l-4-4 4-4M3 6h13a4 4 0 0 1 4 4M21 18H8a4 4 0 0 1-4-4"/></svg>Bucle</button></div>
+  <div class="mode-wrap"><span>Aquest so:</span><div class="segmented" role="group" aria-label="Com es reprodueix aquest so"><button class="seg" id="modeSolo" aria-pressed="true">Apaga els altres</button><button class="seg layer" id="modeLayer" aria-pressed="false">Al damunt</button></div><button class="loop-btn" id="loop" aria-pressed="false" title="Repeteix aquest so en bucle (tecla L)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2l4 4-4 4M7 22l-4-4 4-4M3 6h13a4 4 0 0 1 4 4M21 18H8a4 4 0 0 1-4-4"/></svg>Bucle</button><button class="key-btn" id="keyPick" title="Tria la tecla per reproduir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>Play: <b id="playKeyLabel">Espai</b></button></div>
   <div class="vol"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg><input type="range" id="vol" min="0" max="100" value="100" aria-label="Volum general"><span id="volv">100%</span></div>
   <button id="play" class="big" aria-label="Reproduir" disabled></button>
   <div class="ctl">
@@ -169,6 +178,14 @@ li.playing .eq{display:flex}li.playing .num{display:none}
   <p id="askMsg"></p>
   <input type="text" id="askInput" hidden>
   <div class="ask-actions"><button id="askCancel">Cancel·la</button><button id="askOk" class="ok">D'acord</button></div>
+ </div>
+</div>
+<div class="modal" id="keyModal" hidden>
+ <div class="sheet ask">
+  <div class="sheet-head"><b>Tria la tecla de reproducció</b><button id="keyClose" aria-label="Tanca">✕</button></div>
+  <p class="hint-key">Prem la tecla que vols fer servir per reproduir o pausar. Funciona mentre aquesta pestanya estigui activa; per a segon pla usa les tecles de mitjans (Play/Pausa, anterior i següent), que funcionen fins i tot amb la pantalla apagada.</p>
+  <div class="key-capture"><span id="keyCapture"></span><small>Prem una tecla qualsevol (excepte Esc, Tab i tecles modificadores)</small></div>
+  <div class="ask-actions"><button id="keyReset">Restableix (Espai)</button><button id="keyCancel">Cancel·la</button></div>
  </div>
 </div>
 <input type="file" id="file" multiple hidden>

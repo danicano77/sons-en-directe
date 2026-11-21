@@ -84,11 +84,47 @@
   cueAudio.preload = 'metadata';
   let wakeLock = null, toastTimer = null, volTimer = null;
 
+  /* Tecla de reproducció configurable (es desa al localStorage) */
+  const PLAYKEY_STORAGE = 'sons-directe-playkey';
+  const DEFAULT_PLAYKEY = { code: 'Space', label: 'Espai' };
+  let playKey = DEFAULT_PLAYKEY;
+
   const nextId = () => 'x' + Date.now().toString(36) + '_' + (uid++).toString(36) + Math.random().toString(36).slice(2, 6);
   const clampVol = v => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 100; };
   const fmt = s => { if (!Number.isFinite(s)) return '0:00'; s = Math.floor(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   const volFor = s => Math.min(1, (clampVol(s.volume) / 100) * (masterVolume / 100));
+
+  function keyLabel(e) {
+    if (e.code === 'Space' || e.key === ' ') return 'Espai';
+    const named = {
+      ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→',
+      Enter: 'Intro', Escape: 'Esc', Backspace: 'Retrocès', Tab: 'Tab',
+      Delete: 'Supr', Insert: 'Ins', Home: 'Inici', End: 'Fi',
+      PageUp: 'PgUp', PageDown: 'PgDn', CapsLock: 'Bloq. Maj.',
+      ContextMenu: 'Menú', ScrollLock: 'Scroll', NumLock: 'Num', Pause: 'Pausa'
+    };
+    if (named[e.key]) return named[e.key];
+    if (e.key.length === 1) return e.key.toUpperCase();
+    return e.key;
+  }
+  function savePlayKey() {
+    try { localStorage.setItem(PLAYKEY_STORAGE, JSON.stringify(playKey)); } catch (e) { /* ignore */ }
+  }
+  function loadPlayKey() {
+    try {
+      const raw = localStorage.getItem(PLAYKEY_STORAGE);
+      if (raw) {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj.code === 'string' && obj.code && typeof obj.label === 'string' && obj.label) return obj;
+      }
+    } catch (e) { /* ignore */ }
+    return { ...DEFAULT_PLAYKEY };
+  }
+  function renderPlayKey() {
+    $('playKeyLabel').textContent = playKey.label;
+    $('keyPick').title = 'Tria la tecla per reproduir (ara: ' + playKey.label + ')';
+  }
 
   function toast(msg) {
     const el = $('toast');
@@ -125,6 +161,38 @@
   $('askInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); $('askOk').click(); }
   });
+
+  /* Diàleg per triar la tecla de reproducció */
+  function openKeyModal() {
+    $('keyCapture').innerHTML = '<span class="keycap">' + esc(playKey.label) + '</span>';
+    $('keyModal').hidden = false;
+  }
+  function closeKeyModal() { $('keyModal').hidden = true; }
+  function onKeyCapture(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Escape') { closeKeyModal(); return; }
+    if (e.key === 'Tab') return; // deixa que Tab mogui el focus pels botons
+    const ignored = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph', 'Dead', 'Process', 'Unidentified'];
+    if (ignored.includes(e.key) || e.ctrlKey || e.altKey || e.metaKey) return;
+    if (!e.code) return;
+    playKey = { code: e.code, label: keyLabel(e) };
+    savePlayKey();
+    renderPlayKey();
+    closeKeyModal();
+    toast('Tecla de reproducció: ' + playKey.label);
+  }
+  $('keyPick').onclick = openKeyModal;
+  $('keyClose').onclick = closeKeyModal;
+  $('keyCancel').onclick = closeKeyModal;
+  $('keyModal').addEventListener('click', e => { if (e.target === $('keyModal')) closeKeyModal(); });
+  $('keyReset').onclick = () => {
+    playKey = { ...DEFAULT_PLAYKEY };
+    savePlayKey();
+    renderPlayKey();
+    closeKeyModal();
+    toast('Tecla de reproducció: Espai');
+  };
 
   /* ---------- Reproductor ---------- */
   function cue(i) {
@@ -235,6 +303,9 @@
     bar.setAttribute('aria-valuemax', String(dur));
     bar.setAttribute('aria-valuenow', String(Math.min(time, dur)));
     bar.setAttribute('aria-valuetext', fmt(time) + ' de ' + fmt(dur));
+    if (v && !v.audio.paused && dur && 'mediaSession' in navigator && navigator.mediaSession.setPositionState) {
+      try { navigator.mediaSession.setPositionState({ duration: dur, playbackRate: 1, position: Math.min(time, dur) }); } catch (e) { /* ignore */ }
+    }
   }
 
   /* Cerca a la barra: tocar o arrossegar qualsevol punt salta a aquell temps */
@@ -303,26 +374,49 @@
   function syncPlay() {
     const v = currentVoice();
     const on = !!(v && !v.audio.paused);
+    const active = [...voices.values()].filter(x => !x.audio.paused).length;
     $('play').innerHTML = on ? ICON.pause : ICON.play;
     $('play').classList.toggle('on', on);
     $('play').setAttribute('aria-label', on ? 'Pausar aquest so' : 'Reproduir aquest so');
     $('stop').disabled = voices.size === 0;
-    const active = [...voices.values()].filter(x => !x.audio.paused).length;
     $('status').textContent = active ? active + (active === 1 ? ' so sonant' : ' sons sonants') : 'En silenci';
     $('dot').classList.toggle('live', active > 0);
+    if ('mediaSession' in navigator) {
+      try { navigator.mediaSession.playbackState = active > 0 ? 'playing' : (voices.size ? 'paused' : 'none'); } catch (e) { /* ignore */ }
+    }
     wake(active > 0);
   }
   function updateSession() {
     if (!('mediaSession' in navigator)) return;
     try { navigator.mediaSession.metadata = new MediaMetadata({ title: cur >= 0 ? sounds[cur].name : 'Sons en directe' }); } catch (e) {}
+    const seekTo = t => {
+      if (!Number.isFinite(t)) return;
+      const v = currentVoice();
+      const dur = v && Number.isFinite(v.audio.duration) ? v.audio.duration
+        : (Number.isFinite(cueAudio.duration) ? cueAudio.duration : 0);
+      if (!dur) return;
+      const at = Math.max(0, Math.min(dur - 0.01, t));
+      if (v) { try { v.audio.currentTime = at; } catch (e) { /* ignore */ } }
+      else if (cur >= 0) pendingSeek.set(sounds[cur].id, at);
+      progress();
+    };
+    const seekBy = delta => {
+      const v = currentVoice();
+      if (!v || !Number.isFinite(v.audio.currentTime) || !Number.isFinite(v.audio.duration)) return;
+      seekTo(v.audio.currentTime + delta);
+    };
     const handlers = {
       play: () => playCued(),
       pause: () => { const v = currentVoice(); if (v) v.audio.pause(); },
       previoustrack: () => go(-1),
       nexttrack: () => go(1),
-      stop: () => { pendingSeek.clear(); stopAll(); progress(); }
+      stop: () => { pendingSeek.clear(); stopAll(); progress(); },
+      seekto: d => seekTo(d.seekTime),
+      seekbackward: d => seekBy(-(d.seekOffset || 10)),
+      seekforward: d => seekBy(d.seekOffset || 10)
     };
     for (const k in handlers) { try { navigator.mediaSession.setActionHandler(k, handlers[k]); } catch (e) {} }
+    try { navigator.mediaSession.playbackState = [...voices.values()].some(v => !v.audio.paused) ? 'playing' : 'none'; } catch (e) { /* ignore */ }
   }
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && [...voices.values()].some(v => !v.audio.paused)) wake(true);
@@ -683,6 +777,7 @@
   };
 
   document.addEventListener('keydown', e => {
+    if (!$('keyModal').hidden) { onKeyCapture(e); return; }
     if (!$('askModal').hidden) {
       if (e.key === 'Escape') closeAsk(null);
       return;
@@ -690,7 +785,7 @@
     if (e.key === 'Escape' && !$('scenesModal').hidden) { $('scenesModal').hidden = true; return; }
     if (e.target instanceof Element && e.target.closest('input,textarea,select,button,[contenteditable="true"]')) return;
     if (!$('scenesModal').hidden) return;
-    if (e.code === 'Space') { e.preventDefault(); playCued(); }
+    if (e.code === playKey.code) { e.preventDefault(); playCued(); }
     else if (e.code === 'ArrowRight') { e.preventDefault(); go(1); }
     else if (e.code === 'ArrowLeft') { e.preventDefault(); go(-1); }
     else if (e.code === 'KeyL') { e.preventDefault(); if (cur >= 0) setLoop(cur, !sounds[cur].loop); }
@@ -709,6 +804,8 @@
       if (mv !== null) masterVolume = clampVol(mv);
       $('vol').value = masterVolume;
       $('volv').textContent = Math.round(masterVolume) + '%';
+      playKey = loadPlayKey();
+      renderPlayKey();
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
     } catch (e) {
       toast('No s\'ha pogut obrir l\'emmagatzematge local');

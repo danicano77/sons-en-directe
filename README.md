@@ -32,6 +32,7 @@ git push -u origin main
 
 - **+ Afegir sons**: tria diversos fitxers d'àudio (`mp3`, `wav`, `m4a`, `ogg`, `flac`…). També els pots arrossegar a la llista.
 - **Botó PLAY (el gran)**: reprodueix el so carregat. Si ja sona, el pausa / el reprèn.
+- **Tecla de reproducció**: al costat del selector de mode hi ha el botó «Play: <tecla>». Toca'l i prem la tecla que vulguis (per defecte, `Espai`). Es desa al dispositiu i es conserva en tancar l'app. «Restableix (Espai») torna a la tecla original. Evita `Esc` (atura-ho tot), `Tab` i combinacions amb Ctrl/Alt/Cmd. Aquesta tecla funciona **mentre la pestanya de l'app estigui activa**: un navegador no permet registrar tecles globals del sistema quan la pestanya no té el focus. Per al **segon pla** (pantalla apagada, una altra app, bloqueig), fes servir les **tecles de mitjans** del teclat, l'auricular o la pantalla: Play/Pausa, anterior i següent. gràcies a la integració amb Media Session. També s'hi poden enviar salts de temps (fletxes de la interfície del sistema).
 - **STOP / ENRERE / AVANT**: aturen tot i canvien de so carregat sense reproduir-lo.
 - **Mode de reproducció** (a sobre del PLAY):
   - *Apaga els altres*: en començar aquest so, s'aturen tots els altres que estiguin sonant.
@@ -45,7 +46,7 @@ git push -u origin main
 
 ### Ratolí / teclat
 
-- `Espai` = play/pausa del so carregat
+- Tecla configurable (per defecte `Espai`) = play/pausa del so carregat
 - `←` / `→` = so anterior / següent
 - `L` = bucle on/off del so carregat
 - `Esc` = aturar-ho tot
